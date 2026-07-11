@@ -7,166 +7,66 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
     
     <style>
         * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            padding: 0;
-            background: #000;
-            color: #ccc;
-            font-family: Arial, Helvetica, sans-serif;
-            line-height: 1.4;
-        }
-        
-        .screen {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-        }
-        
-        .top-bar {
-            background: #111;
-            padding: 8px 12px;
-            border-bottom: 1px solid #222;
-            color: #00cc00;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .channels {
-            background: #111;
-            padding: 8px;
-            border-bottom: 1px solid #222;
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            white-space: nowrap;
-        }
-        
-        .channel {
-            padding: 6px 12px;
-            background: #1a1a1a;
-            color: #aaa;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        
-        .channel.active {
-            background: #003300;
-            color: #00cc00;
-        }
-        
-        .messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px;
-            background: #050505;
-        }
-        
-        .post {
-            margin-bottom: 16px;
-            padding: 8px 10px;
-            border-left: 4px solid #00cc00;
-            background: #111;
-        }
-        
-        .post-header {
-            color: #00cc00;
-            font-size: 0.85rem;
-            margin-bottom: 4px;
-        }
-        
-        .message-text {
-            color: #ddd;
-            word-break: break-word;
-        }
-        
-        .input-area {
-            padding: 10px;
-            background: #111;
-            border-top: 1px solid #222;
-        }
-        
-        textarea {
-            width: 100%;
-            background: #1a1a1a;
-            border: 1px solid #333;
-            color: #eee;
-            padding: 10px;
-            height: 80px;
-            resize: none;
-            margin-bottom: 8px;
-        }
-        
-        button {
-            background: #003300;
-            color: #00cc00;
-            border: 1px solid #00cc00;
-            padding: 8px 16px;
-            cursor: pointer;
-            margin-right: 6px;
-        }
-        
-        img { max-width: 100%; margin: 8px 0; border: 1px solid #333; }
-        
-        @media (min-width: 768px) {
-            .screen { flex-direction: row; }
-            .sidebar { width: 180px; border-right: 1px solid #222; }
-            .channels { flex-direction: column; border-bottom: none; border-right: 1px solid #222; width: 220px; }
-            .top-bar { display: none; }
-        }
+        body { margin:0; background:#000; color:#ccc; font-family:Arial, sans-serif; }
+        .screen { display:flex; flex-direction:column; height:100vh; }
+        .top-bar { background:#111; padding:8px 12px; color:#00cc00; font-weight:bold; display:flex; justify-content:space-between; }
+        .channels { background:#111; padding:8px; overflow-x:auto; white-space:nowrap; gap:8px; display:flex; border-bottom:1px solid #222; }
+        .channel { padding:6px 12px; background:#1a1a1a; border-radius:4px; cursor:pointer; }
+        .channel.active { background:#003300; color:#00cc00; }
+        .messages { flex:1; overflow-y:auto; padding:12px; background:#050505; }
+        .post { margin-bottom:16px; padding:8px 10px; border-left:4px solid #00cc00; background:#111; }
+        .input-area { padding:10px; background:#111; border-top:1px solid #222; }
+        textarea { width:100%; background:#1a1a1a; border:1px solid #333; color:#eee; padding:10px; height:80px; resize:none; margin-bottom:8px; }
+        button { background:#003300; color:#00cc00; border:1px solid #00cc00; padding:8px 16px; cursor:pointer; margin:4px 4px 4px 0; }
+        img { max-width:100%; margin:8px 0; border:1px solid #333; }
     </style>
 </head>
 <body>
     <div class="screen">
-        <!-- Mobile Top Bar -->
         <div class="top-bar">
             <span>4chan × Discord</span>
             <span id="current-channel-mobile"># welcome</span>
         </div>
 
-        <!-- Channels (Desktop) -->
         <div class="channels" id="channels-list">
             <div class="channel active" data-channel="welcome"># welcome</div>
             <div class="channel" data-channel="off-topic"># off-topic</div>
             <div class="channel" data-channel="memes"># memes</div>
         </div>
 
-        <!-- Main Chat -->
-        <div style="flex:1; display:flex; flex-direction:column;">
-            <div class="messages" id="messages"></div>
-            
-            <div class="input-area">
-                <textarea id="message-input" placeholder="Post anonymously..."></textarea>
-                <div>
-                    <button onclick="attachImage()">📎 Image</button>
-                    <button onclick="sendPost()">POST</button>
-                </div>
-                <div id="preview"></div>
-            </div>
+        <div class="messages" id="messages"></div>
+
+        <div class="input-area">
+            <textarea id="message-input" placeholder="Write your post..."></textarea>
+            <button onclick="attachImage()">📎 Image</button>
+            <button onclick="sendPost()">POST</button>
+            <div id="preview" style="margin-top:8px;"></div>
         </div>
     </div>
 
     <script>
-      const firebaseConfig = {
-            apiKey: "AIzaSyAfnvKRoX0vGUUsYNIn2JWdhOTZWJaKEm0",
-            authDomain: "chan-discord.firebaseapp.com",
-            projectId: "chan-discord",
-            storageBucket: "chan-discord.firebasestorage.app",
-            messagingSenderId: "1055397657925",
-            appId: "1:1055397657925:web:3e4f23e5f5ad5dc72bd22c"
-        };
+        const firebaseConfig = {
 
+            apiKey: "AIzaSyAfnvKRoX0vGUUsYNIn2JWdhOTZWJaKEm0",
+
+            authDomain: "chan-discord.firebaseapp.com",
+
+            projectId: "chan-discord",
+
+            storageBucket: "chan-discord.firebasestorage.app",
+
+            messagingSenderId: "1055397657925",
+
+            appId: "1:1055397657925:web:3e4f23e5f5ad5dc72bd22c"
+
+        };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const storage = firebase.storage();
-        
         let currentChannel = "welcome";
-        let currentImageFile = null;
+        let currentImageBase64 = null;
 
         firebase.auth().signInAnonymously();
 
@@ -180,11 +80,11 @@
                         const m = doc.data();
                         container.innerHTML += `
                             <div class="post">
-                                <div class="post-header">
+                                <div style="color:#00cc00; font-size:0.85rem;">
                                     Anonymous • ${m.timestamp ? new Date(m.timestamp.seconds*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}
                                 </div>
-                                ${m.text ? `<div class="message-text">${m.text}</div>` : ''}
-                                ${m.imageUrl ? `<img src="${m.imageUrl}" alt="">` : ''}
+                                ${m.text ? `<div style="margin:6px 0;">${m.text}</div>` : ''}
+                                ${m.imageUrl ? `<img src="${m.imageUrl}">` : ''}
                             </div>
                         `;
                     });
@@ -194,14 +94,18 @@
 
         window.sendPost = async function() {
             const text = document.getElementById('message-input').value.trim();
-            if (!text && !currentImageFile) return;
+            if (!text && !currentImageBase64) return;
 
             let imageUrl = null;
-            if (currentImageFile) {
+            if (currentImageBase64) {
                 try {
-                    const ref = storage.ref('images/' + Date.now() + '_' + currentImageFile.name);
-                    await ref.put(currentImageFile);
-                    imageUrl = await ref.getDownloadURL();
+                    const res = await fetch('https://api.imgur.com/3/image', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Client-ID 0d7f5e9c8e9a8b4' }, // Public Client ID
+                        body: JSON.stringify({ image: currentImageBase64.split(',')[1] })
+                    });
+                    const data = await res.json();
+                    imageUrl = data.data.link;
                 } catch(e) { alert("Image upload failed"); }
             }
 
@@ -212,7 +116,7 @@
             });
 
             document.getElementById('message-input').value = '';
-            currentImageFile = null;
+            currentImageBase64 = null;
             document.getElementById('preview').innerHTML = '';
         };
 
@@ -221,13 +125,14 @@
             input.type = 'file';
             input.accept = 'image/*';
             input.onchange = e => {
-                currentImageFile = e.target.files[0];
-                if (currentImageFile) {
+                const file = e.target.files[0];
+                if (file) {
                     const reader = new FileReader();
                     reader.onload = ev => {
-                        document.getElementById('preview').innerHTML = `<img src="${ev.target.result}">`;
+                        currentImageBase64 = ev.target.result;
+                        document.getElementById('preview').innerHTML = `<img src="${currentImageBase64}">`;
                     };
-                    reader.readAsDataURL(currentImageFile);
+                    reader.readAsDataURL(file);
                 }
             };
             input.click();
@@ -244,7 +149,6 @@
             });
         });
 
-        // Initial load
         loadMessages();
     </script>
 </body>
