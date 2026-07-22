@@ -3,153 +3,245 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>4chan Discord</title>
+    <title>Imageboard</title>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-    
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+
     <style>
         * { box-sizing: border-box; }
-        body { margin:0; background:#000; color:#ccc; font-family:Arial, sans-serif; }
-        .screen { display:flex; flex-direction:column; height:100vh; }
-        .top-bar { background:#111; padding:8px 12px; color:#00cc00; font-weight:bold; display:flex; justify-content:space-between; }
-        .channels { background:#111; padding:8px; overflow-x:auto; white-space:nowrap; gap:8px; display:flex; border-bottom:1px solid #222; }
-        .channel { padding:6px 12px; background:#1a1a1a; border-radius:4px; cursor:pointer; }
-        .channel.active { background:#003300; color:#00cc00; }
-        .messages { flex:1; overflow-y:auto; padding:12px; background:#050505; }
-        .post { margin-bottom:16px; padding:8px 10px; border-left:4px solid #00cc00; background:#111; }
-        .input-area { padding:10px; background:#111; border-top:1px solid #222; }
-        textarea { width:100%; background:#1a1a1a; border:1px solid #333; color:#eee; padding:10px; height:80px; resize:none; margin-bottom:8px; }
-        button { background:#003300; color:#00cc00; border:1px solid #00cc00; padding:8px 16px; cursor:pointer; margin:4px 4px 4px 0; }
-        img { max-width:100%; margin:8px 0; border:1px solid #333; }
+        body {
+            margin: 0;
+            background: #0a0a0a;
+            color: #ccc;
+            font-family: Arial, sans-serif;
+        }
+        header {
+            background: #111;
+            padding: 15px 20px;
+            text-align: center;
+            border-bottom: 2px solid #333;
+        }
+        h1 {
+            margin: 0;
+            color: #00cc00;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+        .upload-bar {
+            background: #111;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            background: #003300;
+            color: #00cc00;
+            border: 1px solid #00cc00;
+            padding: 10px 18px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #004400; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+        }
+        .post {
+            background: #111;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #222;
+            transition: transform 0.2s;
+        }
+        .post:hover {
+            transform: scale(1.03);
+        }
+        .post img {
+            width: 100%;
+            height: 280px;
+            object-fit: cover;
+            display: block;
+        }
+        .post-info {
+            padding: 10px;
+        }
+        .post-info .time {
+            font-size: 0.8rem;
+            color: #666;
+        }
+        .post-info .caption {
+            margin: 8px 0;
+            line-height: 1.4;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            max-width: 90%;
+            max-height: 90%;
+            text-align: center;
+        }
+        .modal-content img {
+            max-width: 100%;
+            max-height: 80vh;
+            border: 2px solid #333;
+        }
+        textarea {
+            width: 100%;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #eee;
+            padding: 10px;
+            resize: vertical;
+        }
     </style>
 </head>
 <body>
-    <div class="screen">
-        <div class="top-bar">
-            <span>4chan × Discord</span>
-            <span id="current-channel-mobile"># welcome</span>
+    <header>
+        <h1>Imageboard</h1>
+        <p>Anonymous • Real-time • Anyone can post</p>
+    </header>
+
+    <div class="container">
+        <div class="upload-bar">
+            <input type="file" id="image-upload" accept="image/*" style="display:none;">
+            <button onclick="document.getElementById('image-upload').click()">📤 Upload Image</button>
+            <textarea id="caption-input" rows="2" placeholder="Optional caption..."></textarea>
+            <button onclick="uploadPost()">POST TO BOARD</button>
         </div>
 
-        <div class="channels" id="channels-list">
-            <div class="channel active" data-channel="welcome"># welcome</div>
-            <div class="channel" data-channel="off-topic"># off-topic</div>
-            <div class="channel" data-channel="memes"># memes</div>
-        </div>
+        <div class="grid" id="image-grid"></div>
+    </div>
 
-        <div class="messages" id="messages"></div>
-
-        <div class="input-area">
-            <textarea id="message-input" placeholder="Write your post..."></textarea>
-            <button onclick="attachImage()">📎 Image</button>
-            <button onclick="sendPost()">POST</button>
-            <div id="preview" style="margin-top:8px;"></div>
+    <!-- Fullscreen modal -->
+    <div class="modal" id="modal">
+        <div class="modal-content" onclick="event.stopImmediatePropagation()">
+            <img id="modal-image" onclick="closeModal()">
+            <div id="modal-caption" style="margin-top:10px; color:#ddd;"></div>
         </div>
     </div>
 
     <script>
         const firebaseConfig = {
-
             apiKey: "AIzaSyAfnvKRoX0vGUUsYNIn2JWdhOTZWJaKEm0",
-
             authDomain: "chan-discord.firebaseapp.com",
-
             projectId: "chan-discord",
-
             storageBucket: "chan-discord.firebasestorage.app",
-
             messagingSenderId: "1055397657925",
-
             appId: "1:1055397657925:web:3e4f23e5f5ad5dc72bd22c"
-
         };
+
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        let currentChannel = "welcome";
-        let currentImageBase64 = null;
+        const storage = firebase.storage();
 
         firebase.auth().signInAnonymously();
 
-        function loadMessages() {
-            const container = document.getElementById('messages');
-            db.collection("channels").doc(currentChannel).collection("messages")
-                .orderBy("timestamp", "asc")
+        const grid = document.getElementById('image-grid');
+        let selectedFile = null;
+
+        // Handle file selection
+        document.getElementById('image-upload').addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                selectedFile = e.target.files[0];
+                // Optional: show preview in upload bar
+            }
+        });
+
+        async function uploadPost() {
+            const caption = document.getElementById('caption-input').value.trim();
+            if (!selectedFile) {
+                alert("Please select an image");
+                return;
+            }
+
+            const uploadBtn = document.querySelector('.upload-bar button:last-child');
+            const originalText = uploadBtn.textContent;
+            uploadBtn.textContent = "Uploading...";
+            uploadBtn.disabled = true;
+
+            try {
+                // Upload image to Firebase Storage
+                const storageRef = storage.ref('images/' + Date.now() + '_' + selectedFile.name);
+                await storageRef.put(selectedFile);
+                const imageUrl = await storageRef.getDownloadURL();
+
+                // Save metadata to Firestore
+                await db.collection("posts").add({
+                    imageUrl: imageUrl,
+                    caption: caption || null,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    filename: selectedFile.name
+                });
+
+                // Clear form
+                document.getElementById('caption-input').value = '';
+                selectedFile = null;
+                document.getElementById('image-upload').value = '';
+
+            } catch (error) {
+                console.error(error);
+                alert("Upload failed. Check console.");
+            } finally {
+                uploadBtn.textContent = originalText;
+                uploadBtn.disabled = false;
+            }
+        }
+
+        // Real-time listener
+        function loadPosts() {
+            db.collection("posts")
+                .orderBy("timestamp", "desc")
                 .onSnapshot(snapshot => {
-                    container.innerHTML = "";
+                    grid.innerHTML = "";
                     snapshot.forEach(doc => {
-                        const m = doc.data();
-                        container.innerHTML += `
-                            <div class="post">
-                                <div style="color:#00cc00; font-size:0.85rem;">
-                                    Anonymous • ${m.timestamp ? new Date(m.timestamp.seconds*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}
-                                </div>
-                                ${m.text ? `<div style="margin:6px 0;">${m.text}</div>` : ''}
-                                ${m.imageUrl ? `<img src="${m.imageUrl}">` : ''}
+                        const p = doc.data();
+                        const div = document.createElement('div');
+                        div.className = 'post';
+                        div.innerHTML = `
+                            <img src="${p.imageUrl}" alt="post" onclick="showImage('${p.imageUrl}', '${(p.caption || '').replace(/'/g, "\\'")}')">
+                            <div class="post-info">
+                                <div class="time">Anonymous • ${p.timestamp ? new Date(p.timestamp.seconds*1000).toLocaleString() : 'Just now'}</div>
+                                ${p.caption ? `<div class="caption">${p.caption}</div>` : ''}
                             </div>
                         `;
+                        grid.appendChild(div);
                     });
-                    container.scrollTop = container.scrollHeight;
                 });
         }
 
-        window.sendPost = async function() {
-            const text = document.getElementById('message-input').value.trim();
-            if (!text && !currentImageBase64) return;
-
-            let imageUrl = null;
-            if (currentImageBase64) {
-                try {
-                    const res = await fetch('https://api.imgur.com/3/image', {
-                        method: 'POST',
-                        headers: { 'Authorization': 'Client-ID 0d7f5e9c8e9a8b4' }, // Public Client ID
-                        body: JSON.stringify({ image: currentImageBase64.split(',')[1] })
-                    });
-                    const data = await res.json();
-                    imageUrl = data.data.link;
-                } catch(e) { alert("Image upload failed"); }
-            }
-
-            await db.collection("channels").doc(currentChannel).collection("messages").add({
-                text: text,
-                imageUrl: imageUrl,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-
-            document.getElementById('message-input').value = '';
-            currentImageBase64 = null;
-            document.getElementById('preview').innerHTML = '';
+        window.showImage = function(url, caption) {
+            document.getElementById('modal-image').src = url;
+            document.getElementById('modal-caption').textContent = caption || '';
+            document.getElementById('modal').style.display = 'flex';
         };
 
-        window.attachImage = function() {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.onchange = e => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = ev => {
-                        currentImageBase64 = ev.target.result;
-                        document.getElementById('preview').innerHTML = `<img src="${currentImageBase64}">`;
-                    };
-                    reader.readAsDataURL(file);
-                }
-            };
-            input.click();
+        window.closeModal = function() {
+            document.getElementById('modal').style.display = 'none';
         };
 
-        // Channel switching
-        document.querySelectorAll('.channel').forEach(ch => {
-            ch.addEventListener('click', () => {
-                document.querySelectorAll('.channel').forEach(c => c.classList.remove('active'));
-                ch.classList.add('active');
-                currentChannel = ch.dataset.channel;
-                document.getElementById('current-channel-mobile').textContent = ch.textContent;
-                loadMessages();
-            });
-        });
+        // Close modal when clicking outside image
+        document.getElementById('modal').addEventListener('click', closeModal);
 
-        loadMessages();
+        // Initialize
+        loadPosts();
     </script>
 </body>
 </html>
