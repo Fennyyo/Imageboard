@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imageboard</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin:0; background:#0a0a0a; color:#ccc; font-family:Arial, sans-serif; }
+        header { background:#111; padding:15px; text-align:center; border-bottom:2px solid #333; }
+        h1 { margin:0; color:#00cc00; }
+        .container { max-width:1400px; margin:0 auto; padding:15px; }
+        .upload-bar {
+            background:#111; padding:15px; border-radius:8px; margin-bottom:20px;
+            display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+        }
+        textarea {
+            background:#0a0a0a; color:#ccc; border:1px solid #333; padding:8px;
+            font-family:inherit; resize:vertical;
+        }
+        button {
+            background:#003300; color:#00cc00; border:1px solid #00cc00;
+            padding:10px 18px; cursor:pointer; font-weight:bold;
+        }
+        button:hover { background:#004400; }
+        button:disabled { opacity:0.5; cursor:not-allowed; }
+        .preview { max-height:200px; margin:8px 0; border:2px solid #444; }
+        .status { font-size:0.85rem; color:#888; margin-left:5px; }
+        .status.error { color:#cc3333; }
+        .grid {
+            display:grid;
+            grid-template-columns:repeat(auto-fill, minmax(280px,1fr));
+            gap:15px;
+        }
+        .post {
+            background:#111; border-radius:6px; overflow:hidden;
+            border:1px solid #222;
+        }
+        .post img { width:100%; height:280px; object-fit:cover; cursor:pointer; }
+        .empty-msg { text-align:center; color:#555; padding:40px; grid-column:1/-1; }
+    </style>
+</head>
+<body>
+    <header><h1>Imageboard</h1></header>
+    <div class="container">
+        <div class="upload-bar">
+            <input type="file" id="image-upload" accept="image/*">
+            <textarea id="caption-input" rows="2" placeholder="Optional caption..."></textarea>
+            <button id="post-btn" onclick="uploadPost()">POST TO BOARD</button>
+            <span id="status" class="status"></span>
+        </div>
+
+        <div id="preview-container"></div>
+        <div class="grid" id="image-grid">
+            <div class="empty-msg">Loading posts...</div>
+        </div>
+    </div>
+
+    <script>
+        const postBtn = document.getElementById('post-btn');
+        const statusEl = document.getElementById('status');
+
+        function setStatus(msg, isError = false) {
+            statusEl.textContent = msg;
+            statusEl.className = 'status' + (isError ? ' error' : '');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Pull the shared list of posts from the server so every device sees the same board
+        async function loadPosts() {
+            try {
+                const res = await fetch('/api/posts');
+                if (!res.ok) throw new Error('Failed to load posts');
+                const posts = await res.json();
+                renderPosts(posts);
+            } catch (err) {
+                document.getElementById('image-grid').innerHTML =
+                    `<div class="empty-msg">Couldn't load posts: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
+        function renderPosts(posts) {
+            const grid = document.getElementById('image-grid');
+            if (!posts.length) {
+                grid.innerHTML = '<div class="empty-msg">No posts yet. Be the first!</div>';
+                return;
+            }
+            grid.innerHTML = posts.map(p => `
+                <div class="post">
+                    <img src="/uploads/${encodeURIComponent(p.filename)}"
+                         loading="lazy"
+                         onclick="showImage('/uploads/${encodeURIComponent(p.filename)}', ${JSON.stringify(p.caption || '')})">
+                    <div style="padding:10px;">
+                        <div style="color:#666; font-size:0.8rem;">
+                            Anonymous &middot; ${new Date(p.timestamp).toLocaleString()}
+                        </div>
+                        ${p.caption ? `<div style="margin-top:6px;">${escapeHtml(p.caption)}</div>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function uploadPost() {
+            const fileInput = document.getElementById('image-upload');
+            const caption = document.getElementById('caption-input').value.trim();
+            const file = fileInput.files[0];
+
+            if (!file) {
+                setStatus('Please select an image first!', true);
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', file);
+            formData.append('caption', caption);
+
+            postBtn.disabled = true;
+            setStatus('Uploading...');
+
+            try {
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || 'Upload failed');
+                }
+
+                setStatus('Posted!');
+                fileInput.value = '';
+                document.getElementById('caption-input').value = '';
+                document.getElementById('preview-container').innerHTML = '';
+                loadPosts(); // refresh so the new post appears for everyone
+            } catch (err) {
+                setStatus(err.message, true);
+            } finally {
+                postBtn.disabled = false;
+            }
+        }
+
+        // Live preview when selecting an image
+        document.getElementById('image-upload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const container = document.getElementById('preview-container');
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = ev => {
+                    container.innerHTML = `<img src="${ev.target.result}" class="preview">`;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                container.innerHTML = '';
+            }
+        });
+
+        function showImage(url, caption) {
+            const modal = document.createElement('div');
+            modal.style = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);
+                           display:flex;align-items:center;justify-content:center;z-index:1000;`;
+            modal.innerHTML = `
+                <img src="${url}" style="max-width:90%;max-height:90vh;" onclick="this.parentElement.remove()">
+                ${caption ? `<div style="position:absolute;bottom:30px;color:white;padding:10px;background:rgba(0,0,0,0.7);">${escapeHtml(caption)}</div>` : ''}
+            `;
+            modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+            document.body.appendChild(modal);
+        }
+
+        // Initialize: load whatever's already on the shared board
+        loadPosts();
+    </script>
+</body>
+</html>
